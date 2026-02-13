@@ -11,7 +11,7 @@ A deep learning web application for real-time handwritten letter recognition usi
 ## ✨ Features
 
 - **Real-time Letter Recognition** — Draw letters directly on canvas or upload images
-- **Dual Model Support** — Choose between CNN (~91% accuracy) or MLP (~85% accuracy)
+- **Dual Model Support** — Choose between CNN (~95% accuracy) or MLP (~90% accuracy)
 - **Top-3 Predictions** — View confidence scores for the three most likely letters
 - **Explainable AI** — SmoothGrad saliency maps show which pixels influence predictions
 - **Adversarial Testing** — Add Gaussian noise to test model robustness
