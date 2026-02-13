@@ -4,7 +4,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import os
-from model import CNN_Model 
+from model import LetterCNN
 
 
 BATCH_SIZE = 64
@@ -12,7 +12,7 @@ LEARNING_RATE = 0.001
 EPOCHS = 30  
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DATA_PATH = "data"
-SAVE_PATH = "cnn_model.pth" 
+SAVE_PATH = os.path.join("models", "cnn_model.pth") 
 
 def get_transforms():
     mean, std = (0.1722,), (0.3309,)
@@ -45,7 +45,7 @@ def train():
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
     
-    model = CNN_Model(num_classes=26).to(DEVICE)
+    model = LetterCNN(num_classes=26).to(DEVICE)
     
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)

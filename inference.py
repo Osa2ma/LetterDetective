@@ -4,7 +4,7 @@ from PIL import Image, ImageOps
 import io
 import os
 import numpy as np
-from model import CNN_Model, MLP_Model
+from model import LetterCNN, LetterMLP
 
 # 1. SETUP DEVICE
 # CPU is sufficient and safer for simple inference deployments
@@ -14,20 +14,29 @@ DEVICE = torch.device("cpu")
 # Maps index 0-25 to letters A-Z
 LABELS = {i: chr(65 + i) for i in range(26)}
 
+# 3. MODEL DIRECTORY (cross-platform compatible)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+
+
 def get_model(model_type="cnn"):
     """
     Loads the requested model architecture and weights.
+    
+    Args:
+        model_type: 'cnn' or 'mlp'
+    
+    Returns:
+        Loaded PyTorch model in eval mode, or None if loading fails.
     """
     try:
         # Select Model Architecture
         if model_type == "cnn":
-            model = CNN_Model(num_classes=26)
-            # Update this filename to match your saved CNN weights
-            path = "cnn_model.pth" 
+            model = LetterCNN(num_classes=26)
+            path = os.path.join(MODELS_DIR, "cnn_model.pth")
         elif model_type == "mlp":
-            model = MLP_Model(num_classes=26)
-            # Update this filename to match your saved MLP weights
-            path = "mlp_model.pth"      
+            model = LetterMLP(num_classes=26)
+            path = os.path.join(MODELS_DIR, "mlp_model.pth")
         else:
             print(f"[ERROR] Unknown model type: {model_type}")
             return None
