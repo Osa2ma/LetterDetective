@@ -36,7 +36,7 @@ A deep learning web application for real-time handwritten letter recognition usi
                           ▼                           ▼
                    ┌────────────┐              ┌────────────┐
                    │ LetterCNN  │              │ LetterMLP  │
-                   │  (91%)     │              │  (85%)     │
+                   │  (95%)     │              │  (90%)     │
                    └────────────┘              └────────────┘
 ```
 
