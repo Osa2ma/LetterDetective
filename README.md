@@ -125,8 +125,8 @@ streamlit run app.py
 
 | Model | Test Accuracy | Parameters | Inference Time |
 |-------|--------------|------------|----------------|
-| LetterCNN | ~91% | ~1.2M | ~5ms |
-| LetterMLP | ~85% | ~400K | ~2ms |
+| LetterCNN | ~95% | ~1.2M | ~5ms |
+| LetterMLP | ~90% | ~400K | ~2ms |
 
 ### CNN Architecture
 
@@ -207,10 +207,5 @@ The training script will:
 
 This project is licensed under the MIT License.
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
 ---
 
-<p align="center">Made with ❤️ and PyTorch</p>
