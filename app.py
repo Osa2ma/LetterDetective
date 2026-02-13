@@ -6,6 +6,10 @@ import pandas as pd
 import requests
 import base64
 import os
+import numpy as np
+
+# Import for direct inference (fallback when API unavailable)
+from inference import get_model, predict, compute_saliency
 
 # --- CONFIGURATION ---
 st.set_page_config(
@@ -16,6 +20,15 @@ st.set_page_config(
 
 # FastAPI Backend URL (use environment variable for deployment)
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+USE_DIRECT = os.getenv("USE_DIRECT_INFERENCE", "false").lower() == "true"
+
+# Cache models for direct inference
+@st.cache_resource
+def load_models():
+    return {
+        "cnn": get_model("cnn"),
+        "mlp": get_model("mlp")
+    }
 
 # --- SIDEBAR ---
 st.sidebar.header("⚙️ Settings")
@@ -100,66 +113,98 @@ with col2:
             img.save(buf, format="PNG")
             image_bytes = buf.getvalue()
         
-        # CALL FASTAPI BACKEND
+        # CALL FASTAPI BACKEND OR USE DIRECT INFERENCE
         if image_bytes:
             try:
                 with st.spinner(f"Asking the {model_type} model..."):
-                    # Call /predict endpoint
-                    files = {"file": ("image.png", image_bytes, "image/png")}
-                    params = {"model_type": model_type.lower(), "noise": noise_level}
+                    result = None
+                    use_api = not USE_DIRECT
                     
-                    response = requests.post(f"{API_URL}/predict", files=files, params=params)
+                    # Try API first (unless USE_DIRECT is set)
+                    if use_api:
+                        try:
+                            files = {"file": ("image.png", image_bytes, "image/png")}
+                            params = {"model_type": model_type.lower(), "noise": noise_level}
+                            response = requests.post(f"{API_URL}/predict", files=files, params=params, timeout=5)
+                            
+                            if response.status_code == 200:
+                                result = response.json()
+                        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                            use_api = False  # Fallback to direct inference
                     
-                    if response.status_code == 200:
-                        result = response.json()
+                    # Direct inference fallback
+                    if result is None:
+                        # Load models (cached)
+                        models = load_models()
+                        model = models.get(model_type.lower())
                         
-                        pred_letter = result.get("prediction", "?")
-                        confidence = result.get("confidence", 0.0)
-                        top_3 = result.get("top_3", [])
+                        # Get prediction using inference.predict
+                        top_3_tuples = predict(model, image_bytes, noise_level=noise_level)
                         
-                        st.metric(label="Predicted Letter", value=pred_letter, delta=f"{confidence:.2%}")
+                        # Convert to API-like format
+                        if top_3_tuples:
+                            result = {
+                                "prediction": top_3_tuples[0][0],
+                                "confidence": top_3_tuples[0][1],
+                                "top_3": [{"letter": t[0], "prob": t[1]} for t in top_3_tuples],
+                                "noise_applied": noise_level
+                            }
+                        else:
+                            result = {"prediction": "?", "confidence": 0.0, "top_3": []}
+                    
+                    pred_letter = result.get("prediction", "?")
+                    confidence = result.get("confidence", 0.0)
+                    top_3 = result.get("top_3", [])
+                    
+                    st.metric(label="Predicted Letter", value=pred_letter, delta=f"{confidence:.2%}")
+                    
+                    # --- CONFUSION CHART (Top 3) ---
+                    if top_3:
+                        st.subheader("Top 3 Predictions")
+                        chart_data = pd.DataFrame({
+                            "Letter": [item["letter"] for item in top_3],
+                            "Probability": [item["prob"] for item in top_3]
+                        }).set_index("Letter")
+                        st.bar_chart(chart_data)
+                    
+                    if pred_letter == "?":
+                        st.warning("The model is unsure.")
+                    
+                    # --- SALIENCY MAP (Explainable AI) ---
+                    if show_saliency:
+                        st.subheader("AI Attention Map")
+                        heatmap_bytes = None
                         
-                        # --- CONFUSION CHART (Top 3) ---
-                        if top_3:
-                            st.subheader("Top 3 Predictions")
-                            chart_data = pd.DataFrame({
-                                "Letter": [item["letter"] for item in top_3],
-                                "Probability": [item["prob"] for item in top_3]
-                            }).set_index("Letter")
-                            st.bar_chart(chart_data)
-                        
-                        if pred_letter == "?":
-                            st.warning("The model is unsure.")
-                        
-                        # --- SALIENCY MAP (Explainable AI) ---
-                        if show_saliency:
-                            st.subheader("AI Attention Map")
-                            explain_files = {"file": ("image.png", image_bytes, "image/png")}
-                            explain_params = {"model_type": model_type.lower()}
-                            
-                            explain_response = requests.post(f"{API_URL}/explain", files=explain_files, params=explain_params)
-                            
-                            if explain_response.status_code == 200:
-                                explain_result = explain_response.json()
-                                heatmap_b64 = explain_result.get("heatmap")
+                        # Try API first
+                        if use_api:
+                            try:
+                                explain_files = {"file": ("image.png", image_bytes, "image/png")}
+                                explain_params = {"model_type": model_type.lower()}
+                                explain_response = requests.post(f"{API_URL}/explain", files=explain_files, params=explain_params, timeout=5)
                                 
-                                if heatmap_b64:
-                                    heatmap_bytes = base64.b64decode(heatmap_b64)
-                                    
-                                    col_orig, col_heat = st.columns(2)
-                                    with col_orig:
-                                        st.image(image_bytes, caption="Original", width=140)
-                                    with col_heat:
-                                        st.image(heatmap_bytes, caption="Where AI is looking", width=140)
-                            else:
-                                st.warning("Could not generate saliency map.")
-                    else:
-                        st.error(f"API Error: {response.status_code}")
-                        st.json(response.json())
+                                if explain_response.status_code == 200:
+                                    explain_result = explain_response.json()
+                                    heatmap_b64 = explain_result.get("heatmap")
+                                    if heatmap_b64:
+                                        heatmap_bytes = base64.b64decode(heatmap_b64)
+                            except:
+                                pass
                         
-            except requests.exceptions.ConnectionError:
-                st.error("Could not connect to Backend API.")
-                st.info("Make sure to run `python main.py` first!")
+                        # Direct inference fallback for saliency
+                        if heatmap_bytes is None:
+                            models = load_models()
+                            model = models.get(model_type.lower())
+                            heatmap_bytes = compute_saliency(model, image_bytes)
+                        
+                        if heatmap_bytes:
+                            col_orig, col_heat = st.columns(2)
+                            with col_orig:
+                                st.image(image_bytes, caption="Original", width=140)
+                            with col_heat:
+                                st.image(heatmap_bytes, caption="Where AI is looking", width=140)
+                        
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
         else:
             st.warning("Please draw something or upload an image first.")
 
